@@ -4,101 +4,104 @@ const { MongoClient } = require('mongodb');
 //  mongodb://{서버IP}:{port}/{데이터베이스 이름}
 
 //  클라이언트 생성
-const url = "mongodb://192.168.1.134:27017/mydb";
+const url = "mongodb://192.168.1.145:27017/mydb";
 const client = new MongoClient(url, { useUnifiedTopology: true });
-//  접속 테스트
-function testConnect() {
-    client.connect((err, client) => {
-        //  콜백 함수
-        if (err) {
-            //  에러 발생시
-            console.error(err);
-        } else {
-            //  정상 접속
-            console.log(client);
-        }
+
+//  문서 한 개 가져오기
+function testFindOne() {
+    client.connect().then(client => {
+        const db = client.db("mydb");
+
+        db.collection("friends").findOne().then(result => {
+            console.log(result);
+        });
+
+        
     })
 }
-// testConnect();
+// testFindOne();
 
-//  insertOne, insertMany
-function testInsertDocument(docs) {
-    //  doc 배열이면 -> insertMany
-    //  객체면 -> insert
-    if (Array.isArray(docs)) {
-        //  insertMany
-        //  db.collection.insert([{문서}, {문서}...])
-        //  SQL: INSERT INTO table VALUES(...), (...), (...)
-        client.connect().then(client => {
-            const db = client.db("mydb");
-            db.collection("friends").insertMany(docs)
-                .then(result => {
-                    console.log(result.insertedCount, "개의 문서가 삽입");
-                })
+//  db.collection.find()
+//  SELECT * FROM table
+function testFind() {
+    client.connect().then(client => {
+        const db = client.db("mydb");
+
+        //  find는 Promise 지원하지 않음 -> Callback
+        /*
+        db.collection("friends").find((err, cursor) => {
+            if (err) {
+                console.error(err);
+            } else {
+                cursor.forEach(item => {
+                    console.log(item);
+                });
+            }
+        });
+        */
+        //  데이터가 많지 않을 때는 toArray -> Promise 지원
+        db.collection("friends").find()
+            .skip(2)    //  2개 건너뛰기
+            .limit(2)   //  2개 가져오기
+            .sort({ name: -1 })  //  1: 오름차순, -1: 내림차순
+            .toArray()
+            .then(result => {
+            for (let i = 0; i < result.length; i++) {
+                console.log(result[i]);
+            }
+        }).catch(err => {
+            console.error(err);
+        });
+    });
+}
+// testFind();
+
+//  조건절 
+//  SELECT * FROM table WHERE column=...;
+function testFindByName(name) {
+    client.connect().then(client => {
+        const db = client.db("mydb");
+
+        db.collection("friends").find({
+            name: name
+        }).toArray().then(result => {
+            for (let i = 0; i < result.length; i++) {
+                console.log(result[i]);
+            }
         }).catch(err => {
             console.error(err);
         })
-    } else {
-        //  insert
-        //  db.collection.insert({ 문서 });
-        //  SQL: INSERT INTO table VALUES(...);
-        client.connect((err, client) => {
-            const db = client.db("mydb");
-            //  collection 객체에 접근
-            db.collection("friends").insertOne(docs, (err, result) => {
-                if (err) {
-                    console.error(err);
-                } else {
-                    console.log(result);
-                    console.log(result.insertedCount, "개의 문서가 insert");
-                }
-            });
-        });
-    }
-}
-// testInsertDocument( { name: "전우치", job: "도사" });
-testInsertDocument([
-    {name: "고길동", gender: "남성", species: "인간", age: 50},
-    {name: "둘리", gender: "남성", species: "공룡", age: 100000000},
-    {name: "도우너", gender: "남성", sepcies: "외계인", age: 15},
-    {name: "또치", gender: "여성", species: "조류", age: 13},
-    {name: "마이콜", gender: "남성", species: "인간", age: 25},
-    {name: "봉미선", gender: "여성", species: "인간", age: 35}
-]); //  문서의 배열 -> insertMany
-
-function testDeleteAll() {
-    //  db.collection.delete()  : 전체 삭제
-    //  SQL: DELETE FROM table;
-    //  Promise 방식
-    client.connect().then(client => {
-        const db = client.db("mydb");
-        db.collection('friends').deleteMany({}) // 삭제 조건 객체
-            .then(result => {
-                console.log(result.deletedCount, "개의 문서가 삭제");
-            });
-    }).catch(err => {
-        console.error(err);
-    });
-}
-// testDeleteAll();
-
-// update
-// SQL : UPDATE table SET col=val, col=val
-// db.collection.update( { 조건 객체 }, { $set: { 변경할 내용 }})
-function testUpdate(condition, doc) {
-    client.connect().then(client => {
-        const db = client.db("mydb");
-
-        db.collection("friends")
-            .updateMany(condition, { $set: doc }).then(result => {
-               // console.log(result);
-               console.log(result.result.nModified,
-                    "개의 문서가 업데이트")
-            });
     })
 };
+// testFindByName("고길동");
 
-testUpdate(
-    { name: "마이콜" }, // 조건 name = "마이콜"
-    { job: "무직" }   // 변경 문서의 내용
-)
+//  비교 연산자 : $gt(>), $gte(>=), $lt(<), $lte(<=), $ne(!=)
+//  논리 연산자 : $and, $or, $not
+function testFindByCondition(projection, condition) {
+    client.connect().then(client => {
+        const db = client.db("mydb");
+
+        db.collection("friends").find(
+            condition, //  조건
+            projection
+        ).toArray().then(result => {
+            for (let i = 0; i <= result.length; i++) {
+                console.log(result[i]);
+            }
+        })
+    })
+};
+//  projection 객체 : 1이면 표시, 0이면 표시하지 않음
+/*
+testFindByCondition({ name: 1, age: 1, species: 1}, 
+    {
+        // $and:[
+        //     {age: { $gte: 20 }},
+        //     {age: { $lte: 50 }}
+        // ]   //  20세 이상 50세 이하
+        $or: [
+           { age: { $lt: 20 }},
+           { age: { $gt: 50 }}
+       ]
+    });
+*/
